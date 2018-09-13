@@ -92,6 +92,8 @@ public class QQService {
      */
     private static int PUSH_GROUP_USER_COUNT = XiaoVs.getInt("qq.bot.pushGroupUserCnt");
 
+    private Map userMap = new HashMap();
+
     static {
         String adConf = XiaoVs.getString("ads");
         if (StringUtils.isNotBlank(adConf)) {
@@ -155,6 +157,10 @@ public class QQService {
      */
     @Inject
     private ItpkQueryService itpkQueryService;
+    /**
+     * 防止被自己的信息导致死循环
+     * */
+    private String MyId;
 
     /**
      * Initializes QQ client.
@@ -165,22 +171,26 @@ public class QQService {
         xiaoV = new SmartQQClient(new MessageCallback() {
             @Override
             public void onMessage(final Message message) {
-                new Thread(() -> {
+                new Thread(() -> { // 私聊
                     try {
                         Thread.sleep(500 + RandomUtils.nextInt(1000));
 
                         final String content = message.getContent();
-                        final String key = XiaoVs.getString("qq.bot.key");
-                        if (!StringUtils.startsWith(content, key)) { // 不是管理命令，只是普通的私聊
-                            // 让小薇进行自我介绍
-                            xiaoV.sendMessageToFriend(message.getUserId(), XIAO_V_INTRO);
-
-                            return;
-                        }
-
-                        final String msg = StringUtils.substringAfter(content, key);
-                        LOGGER.info("Received admin message: " + msg);
-                        sendToPushQQGroups(msg);
+//                        final String key = XiaoVs.getString("qq.bot.key");
+//                        if (!StringUtils.startsWith(content, key)) { // 不是管理命令，只是普通的私聊
+//                            // 让小薇进行自我介绍
+//                            xiaoV.sendMessageToFriend(message.getUserId(), XIAO_V_INTRO);
+//
+//                            return;
+//                        }
+                        //骰子
+                        String instruction = "";
+                       Integer dice = 100;
+                       Integer contentDice = 0;
+                       //http://scp-wiki-cn.wikidot.com/ //scp模块使用
+//                        final String msg = StringUtils.substringAfter(content, key);
+//                        LOGGER.info("Received admin message: " + msg);
+//                        sendToPushQQGroups(msg);
                     } catch (final Exception e) {
                         LOGGER.log(Level.ERROR, "XiaoV on group message error", e);
                     }
@@ -189,7 +199,7 @@ public class QQService {
 
             @Override
             public void onGroupMessage(final GroupMessage message) {
-                new Thread(() -> {
+                new Thread(() -> { //群聊
                     try {
                         Thread.sleep(500 + RandomUtils.nextInt(1000));
 
@@ -202,7 +212,7 @@ public class QQService {
 
             @Override
             public void onDiscussMessage(final DiscussMessage message) {
-                new Thread(() -> {
+                new Thread(() -> { //讨论组
                     try {
                         Thread.sleep(500 + RandomUtils.nextInt(1000));
 
@@ -216,10 +226,18 @@ public class QQService {
 
         reloadGroups();
         reloadDiscusses();
-
+        MyId = xiaoV.returnMyid();
         LOGGER.info("小薇初始化完毕");
     }
-
+    private void GetGroupUser2Cache(Long gcode){
+        GroupInfo group = xiaoV.getGroupInfo(gcode);
+        userMap.clear();
+        if (group != null){
+            for (GroupUser user : group.getUsers()){
+                userMap.put(user.getUin(), user.getNick());
+            }
+        }
+    }
     private void sendToThird(final String msg, final String user) {
         final String thirdAPI = XiaoVs.getString("third.api");
         final String thirdKey = XiaoVs.getString("third.key");
@@ -360,13 +378,13 @@ public class QQService {
             group = QQ_GROUPS.get(groupId);
         }
 
-        if (null == group) {
-            LOGGER.log(Level.ERROR, "Group list error [groupId=" + groupId + "], 请先参考项目主页 FAQ 解决"
-                    + "（https://github.com/b3log/xiaov#报错-group-list-error-groupidxxxx-please-report-this-bug-to-developer-怎么破），"
-                    + "如果还有问题，请到论坛讨论帖中进行反馈（https://hacpai.com/article/1467011936362）");
-
-            return;
-        }
+//        if (null == group) {
+//            LOGGER.log(Level.ERROR, "Group list error [groupId=" + groupId + "], 请先参考项目主页 FAQ 解决"
+//                    + "（https://github.com/b3log/xiaov#报错-group-list-error-groupidxxxx-please-report-this-bug-to-developer-怎么破），"
+//                    + "如果还有问题，请到论坛讨论帖中进行反馈（https://hacpai.com/article/1467011936362）");
+//
+//            return;
+//        }
 
         LOGGER.info("Pushing [msg=" + msg + "] to QQ qun [" + group.getName() + "]");
         xiaoV.sendMessageToGroup(groupId, msg);
@@ -380,23 +398,30 @@ public class QQService {
             discuss = QQ_DISCUSSES.get(discussId);
         }
 
-        if (null == discuss) {
-            LOGGER.log(Level.ERROR, "Discuss list error [discussId=" + discussId + "], 请先参考项目主页 FAQ 解决"
-                    + "（https://github.com/b3log/xiaov#报错-group-list-error-groupidxxxx-please-report-this-bug-to-developer-怎么破），"
-                    + "如果还有问题，请到论坛讨论帖中进行反馈（https://hacpai.com/article/1467011936362）");
-
-            return;
-        }
+//        if (null == discuss) {
+//            LOGGER.log(Level.ERROR, "Discuss list error [discussId=" + discussId + "], 请先参考项目主页 FAQ 解决"
+//                    + "（https://github.com/b3log/xiaov#报错-group-list-error-groupidxxxx-please-report-this-bug-to-developer-怎么破），"
+//                    + "如果还有问题，请到论坛讨论帖中进行反馈（https://hacpai.com/article/1467011936362）");
+//
+//            return;
+//        }
 
         LOGGER.info("Pushing [msg=" + msg + "] to QQ discuss [" + discuss.getName() + "]");
         xiaoV.sendMessageToDiscuss(discussId, msg);
     }
 
     private void onQQGroupMessage(final GroupMessage message) {
+
         final long groupId = message.getGroupId();
 
         final String content = message.getContent();
         final String userName = Long.toHexString(message.getUserId());
+        String userNick = "";
+        if (!userMap.isEmpty())//防空
+            userNick = userMap.get(message.getUserId()).toString();
+        else
+            GetGroupUser2Cache(groupId);
+
         // Push to third system
         String qqMsg = content.replaceAll("\\[\"face\",[0-9]+\\]", "");
         if (StringUtils.isNotBlank(qqMsg)) {
@@ -411,9 +436,9 @@ public class QQService {
             msg = answer(content, userName);
         }
 
-        if (StringUtils.isBlank(msg)) {
-            return;
-        }
+//        if (StringUtils.isBlank(msg)) {
+//            return;
+//        }
 
         if (RandomUtils.nextFloat() >= 0.9) {
             Long latestAdTime = GROUP_AD_TIME.get(groupId);
@@ -429,7 +454,18 @@ public class QQService {
                 GROUP_AD_TIME.put(groupId, now);
             }
         }
+        if (StringUtils.contains(content, XiaoVs.QQ_BOT_NAME + " 强制更新群用户信息")) {
+            GetGroupUser2Cache(groupId);
+            msg = "更新成功";
+        }
+        //会有一个死循环.等下处理
+        String logMessage = content.replaceAll("\\[\"face\",[0-9]+\\]", "");
 
+        msg = userNick + "说了" +  logMessage;
+        Long uid = message.getUserId();
+        if (Objects.equals(MyId, uid.toString())){//不反回自己说的话
+            return;
+        }
         sendMessageToGroup(groupId, msg);
     }
 

@@ -64,7 +64,10 @@ public class SmartQQClient implements Closeable {
 
     //线程开关
     private volatile boolean pollStarted;
-
+    //群组用户列表
+    private Map groupCode = new HashMap();
+    //我的id
+    private String myId;
 
     public SmartQQClient(final MessageCallback callback) {
         this.client = Client.pooled().maxPerRoute(5).maxTotal(10).build();
@@ -107,9 +110,12 @@ public class SmartQQClient implements Closeable {
         getFriendStatus(); //修复Api返回码[103]的问题
         //登录成功欢迎语
         UserInfo userInfo = getAccountInfo();
+        myId = userInfo.getUin();
         LOGGER.info(userInfo.getNick() + "，欢迎！");
     }
-
+    public String  returnMyid(){
+        return myId;
+    }
     //登录流程1：获取二维码
     private void getQRCode() {
         LOGGER.debug("开始获取二维码");
@@ -222,6 +228,15 @@ public class SmartQQClient implements Closeable {
             retryTimes4getGroupList--;
         }
         JSONObject result = getJsonObjectResult(response);
+        result.toJSONString();
+        JSONArray gnameList = (JSONArray) result.get("gnamelist");
+        if (!gnameList.isEmpty()) {
+            //保存群的code和id做一个对应的键值对保证获取的code是对的
+            for (int i = 0; i < gnameList.size(); i++) {
+                JSONObject gname = gnameList.getJSONObject(i);
+                groupCode.put(gname.get("gid"), gname.get("code"));
+            }
+        }
         return JSON.parseArray(result.getJSONArray("gnamelist").toJSONString(), Group.class);
     }
 
@@ -538,13 +553,12 @@ public class SmartQQClient implements Closeable {
     /**
      * 获得群的详细信息
      *
-     * @param groupCode 群编号
+     * @param groupId 群编号
      * @return
      */
-    public GroupInfo getGroupInfo(long groupCode) {
+    public GroupInfo getGroupInfo(long groupId) {
         LOGGER.debug("开始获取群资料");
-
-        Response<String> response = get(ApiURL.GET_GROUP_INFO, groupCode, vfwebqq);
+        Response<String> response = get(ApiURL.GET_GROUP_INFO, groupCode.get(groupId), vfwebqq);
         JSONObject result = getJsonObjectResult(response);
         GroupInfo groupInfo = result.getObject("ginfo", GroupInfo.class);
         //获得群成员信息
@@ -623,6 +637,16 @@ public class SmartQQClient implements Closeable {
                 .addHeader("User-Agent", ApiURL.USER_AGENT)
                 .addHeader("Referer", url.getReferer())
                 .addHeader("Origin", url.getOrigin())
+                .addForm("r", r.toJSONString())
+                .text(StandardCharsets.UTF_8);
+    }
+
+    //发送post请求
+    private Response<String> post(String url,String referer,String origin, JSONObject r) {
+        return session.post(url)
+                .addHeader("User-Agent", ApiURL.USER_AGENT)
+                .addHeader("Referer", referer)
+                .addHeader("Origin", origin)
                 .addForm("r", r.toJSONString())
                 .text(StandardCharsets.UTF_8);
     }
